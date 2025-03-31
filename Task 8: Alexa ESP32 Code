@@ -1,0 +1,47 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "SSID";      
+const char* password = "PASSWORD";  
+WebServer server(80);  
+
+#define LED_PIN 5  
+
+void handleLEDOn() {
+    digitalWrite(LED_PIN, HIGH);
+    server.send(200, "text/plain", "LED turned ON");
+}
+
+void handleLEDOff() {
+    digitalWrite(LED_PIN, LOW);
+    server.send(200, "text/plain", "LED turned OFF");
+}
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);  
+
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi...");
+    
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    Serial.println("\nWiFi connected!");
+    Serial.print("ESP32 IP Address: ");
+    Serial.println(WiFi.localIP());
+
+    // Define URL routes
+    server.on("/led/on", handleLEDOn);
+    server.on("/led/off", handleLEDOff);
+
+    server.begin();
+    Serial.println("HTTP server started.");
+}
+
+void loop() {
+    server.handleClient();
+}
