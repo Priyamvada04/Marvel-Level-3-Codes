@@ -1,0 +1,61 @@
+#include <SPI.h>
+#include <MFRC522.h>
+
+// RFID Module Pins
+#define SS_PIN  5  // SDA pin of MFRC522
+#define RST_PIN 22 // RST pin of MFRC522
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+// Motor Driver Pins (L298N)
+#define IN1 18
+#define IN2 19
+#define ENA 23 // Speed control (optional)
+
+String card1 = "23bef1b";  // Card UID for forward
+String card2 = "139d7b11";  // Card UID for backward
+
+void setup() {
+    Serial.begin(115200);
+    SPI.begin();
+    rfid.PCD_Init();
+
+    // Motor Pins Setup
+    pinMode(IN1, OUTPUT);
+    pinMode(IN2, OUTPUT);
+    pinMode(ENA, OUTPUT);
+    analogWrite(ENA, 255);
+}
+
+void loop() {
+    if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
+        return;
+    }
+
+    String UID = "";
+    for (byte i = 0; i < rfid.uid.size; i++) {
+        UID += String(rfid.uid.uidByte[i], HEX);
+    }
+
+    Serial.print("RFID Tag Detected: ");
+    Serial.println(UID);
+
+    if (UID == card1) {
+        Serial.println("Motor Moving Forward");
+        digitalWrite(IN1, HIGH);
+        digitalWrite(IN2, LOW);
+    } 
+    else if (UID == card2) {
+        Serial.println("Motor Moving Backward");
+        digitalWrite(IN1, LOW);
+        digitalWrite(IN2, HIGH);
+    } 
+    else {
+        Serial.println("Unknown RFID Tag Detected");
+        digitalWrite(IN1, LOW);
+        digitalWrite(IN2, LOW);
+    }
+
+    delay(2000);
+    rfid.PICC_HaltA();
+    rfid.PCD_StopCrypto1();
+}
