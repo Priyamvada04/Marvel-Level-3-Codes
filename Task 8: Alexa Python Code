@@ -1,0 +1,66 @@
+import os
+import pyaudio
+import struct
+import requests
+import wave
+from google.cloud import speech, texttospeech
+import simpleaudio as sa  # For playing the response audio
+
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "key.json"
+
+# ESP32 IP Address
+ESP32_IP = "http://192.168.1.100"
+
+# Initialize Google STT and TTS Clients
+stt_client = speech.SpeechClient()
+tts_client = texttospeech.TextToSpeechClient()
+
+# Audio Stream Setup
+pa = pyaudio.PyAudio()
+stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4096)
+
+def recognize_speech():
+    print("Listening...")
+    audio_data = stream.read(4096)
+    audio_bytes = struct.unpack_from("h" * (len(audio_data) // 2), audio_data)
+
+    request = speech.RecognizeRequest(
+        config=speech.RecognitionConfig(encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16, language_code="en-US"),
+        audio=speech.RecognitionAudio(content=bytes(audio_bytes)),
+    )
+
+    response = stt_client.recognize(request=request)
+    return response.results[0].alternatives[0].transcript.lower() if response.results else None
+
+def speak(response_text):
+    print("Assistant:", response_text)
+
+    synthesis_input = texttospeech.SynthesisInput(text=response_text)
+    voice_params = texttospeech.VoiceSelectionParams(language_code="en-US", ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL)
+    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.LINEAR16)
+
+    response = tts_client.synthesize_speech(input=synthesis_input, voice=voice_params, audio_config=audio_config)
+
+    # Save and play the audio response
+    with open("response.wav", "wb") as out:
+        out.write(response.audio_content)
+    
+    wave_obj = sa.WaveObject.from_wave_file("response.wav")
+    wave_obj.play().wait_done()
+
+def send_command_to_esp32(command):
+    if "turn on the light" in command:
+        requests.get(f"{ESP32_IP}/led/on")
+        speak("Turning on the light.")
+    elif "turn off the light" in command:
+        requests.get(f"{ESP32_IP}/led/off")
+        speak("Turning off the light.")
+    else:
+        speak("Sorry, I didn't understand the command.")
+
+print("Voice assistant ready.")
+
+while True:
+    command = recognize_speech()
+    if command:
+        send_command_to_esp32(command)
